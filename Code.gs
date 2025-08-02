@@ -50,7 +50,7 @@ const userLogsSheet = ensureSheet('UserLogs', ['Timestamp', 'User Email', 'Actio
 function doOptions(e) {
   return ContentService.createTextOutput()
     .withHeaders({
-      'Access-Control-Allow-Origin': '*', // Allow all origins
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     });
@@ -93,7 +93,7 @@ function doPost(e) {
       case 'getInitialData':
         responseData = getInitialData();
         break;
-      case 'getUsers': // Added this case to handle initial user list fetch for auth screen
+      case 'getUsers':
         responseData = getUsers();
         break;
       case 'handleGenerateTickets':
@@ -130,20 +130,20 @@ function doPost(e) {
         responseData = validateTicketPublic(request.payload.ticketNumber);
         break;
       default:
-        throw new Error(`Unknown action: ${request.action}`);
+        throw new Error('Unknown action: ' + request.action);
     }
 
     const response = { status: 'success', data: responseData };
     return ContentService.createTextOutput(JSON.stringify(response))
       .setMimeType(ContentService.MimeType.JSON)
-      .withHeaders({'Access-Control-Allow-Origin': '*'}); // Add CORS header to actual response
+      .withHeaders({'Access-Control-Allow-Origin': '*'});
 
   } catch (error) {
     logAction('SYSTEM_ERROR', 'API_ERROR', error.stack);
     const errorResponse = { status: 'error', message: error.message };
     return ContentService.createTextOutput(JSON.stringify(errorResponse))
       .setMimeType(ContentService.MimeType.JSON)
-      .withHeaders({'Access-Control-Allow-Origin': '*'}); // Also add CORS header to error responses
+      .withHeaders({'Access-Control-Allow-Origin': '*'});
   }
 }
 
@@ -163,14 +163,16 @@ function syncOfflineScans(offlineScans) {
 
   offlineScans.forEach(scan => {
     try {
-      const { ticketNumber, timestamp, scannerId } = scan;
+      const ticketNumber = scan.ticketNumber;
+      const timestamp = scan.timestamp;
+      const scannerId = scan.scannerId;
       
       // Find the ticket
       const textFinder = ticketsSheet.createTextFinder(ticketNumber);
       const found = textFinder.findNext();
       
       if (!found) {
-        results.failed.push({ ticketNumber, reason: 'Ticket not found' });
+        results.failed.push({ ticketNumber: ticketNumber, reason: 'Ticket not found' });
         return;
       }
 
@@ -180,8 +182,8 @@ function syncOfflineScans(offlineScans) {
       // Check if already scanned
       if (ticketData[2] === 'Scanned') {
         results.duplicates.push({ 
-          ticketNumber, 
-          reason: `Already scanned by ${ticketData[5]} at ${new Date(ticketData[4]).toLocaleString()}` 
+          ticketNumber: ticketNumber, 
+          reason: 'Already scanned by ' + ticketData[5] + ' at ' + new Date(ticketData[4]).toLocaleString()
         });
         return;
       }
@@ -192,9 +194,9 @@ function syncOfflineScans(offlineScans) {
       ticketsSheet.getRange(row, 6).setValue(scannerId);
       
       // Log the action with offline timestamp
-      logAction(scannerId, 'SCAN_SUCCESS_OFFLINE', `Offline scan synced for ticket: ${ticketNumber}`, ticketNumber);
+      logAction(scannerId, 'SCAN_SUCCESS_OFFLINE', 'Offline scan synced for ticket: ' + ticketNumber, ticketNumber);
       
-      results.successful.push({ ticketNumber, syncedAt: new Date() });
+      results.successful.push({ ticketNumber: ticketNumber, syncedAt: new Date() });
       
     } catch (error) {
       results.failed.push({ ticketNumber: scan.ticketNumber, reason: error.message });
@@ -225,7 +227,7 @@ function getHourlyAnalytics() {
     const timestamp = new Date(row[timestampIndex]);
     const hour = timestamp.getHours();
     const date = timestamp.toDateString();
-    const key = `${date}-${hour}`;
+    const key = date + '-' + hour;
     
     if (!hourlyData[key]) {
       hourlyData[key] = {
@@ -248,7 +250,8 @@ function getHourlyAnalytics() {
  * Imports tickets from CSV data
  */
 function importCsvTickets(csvData) {
-  const { csvContent, ticketType } = csvData;
+  const csvContent = csvData.csvContent;
+  const ticketType = csvData.ticketType;
   const lines = csvContent.split('\n').filter(line => line.trim() !== '');
   
   if (lines.length === 0) {
@@ -277,13 +280,13 @@ function importCsvTickets(csvData) {
   for (let i = 0; i < guestNames.length; i++) {
     currentRow++;
     const guestName = guestNames[i];
-    const ticketNumber = `TK${ticketType.toUpperCase().slice(0,3)}241031${String(currentRow).padStart(4, '0')}`;
+    const ticketNumber = 'TK' + ticketType.toUpperCase().slice(0,3) + '241031' + String(currentRow).padStart(4, '0');
     
     // Generate QR code
-    const qrCodeBlob = UrlFetchApp.fetch(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(ticketNumber)}`).getBlob().setName(`${ticketNumber}_qr.png`);
+    const qrCodeBlob = UrlFetchApp.fetch('https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=' + encodeURIComponent(ticketNumber)).getBlob().setName(ticketNumber + '_qr.png');
     const qrCodeFile = DriveApp.getFolderById(FOLDER_IDS.qrCodes).createFile(qrCodeBlob);
     qrCodeFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const qrCodeUrl = `https://drive.google.com/uc?id=${qrCodeFile.getId()}`;
+    const qrCodeUrl = 'https://drive.google.com/uc?id=' + qrCodeFile.getId();
 
     // Generate PDF with guest name
     const ticketPdfUrl = createIndividualTicketWithGuest(ticketNumber, qrCodeFile, settings, guestName);
@@ -303,7 +306,7 @@ function importCsvTickets(csvData) {
     ticketsSheet.getRange(ticketsSheet.getLastRow() + 1, 1, newTicketsData.length, newTicketsData[0].length).setValues(newTicketsData);
   }
   
-  logAction(user, 'IMPORT_CSV_TICKETS', `Imported ${guestNames.length} tickets from CSV for ${ticketType}.`);
+  logAction(user, 'IMPORT_CSV_TICKETS', 'Imported ' + guestNames.length + ' tickets from CSV for ' + ticketType + '.');
   
   return {
     count: guestNames.length,
@@ -343,7 +346,7 @@ function validateTicketPublic(ticketNumber) {
   if (ticketInfo.scanStatus === 'Scanned') {
     return { 
       status: 'SCANNED', 
-      message: `This ticket has already been used.`,
+      message: 'This ticket has already been used.',
       ticketNumber: ticketInfo.ticketNumber, 
       ticketType: ticketInfo.ticketType,
       guestName: ticketInfo.guestName,
@@ -372,15 +375,16 @@ function getInitialData() {
   
   return {
     userInfo: { email: Session.getEffectiveUser().getEmail() },
-    settings,
-    tickets,
-    users,
-    stats
+    settings: settings,
+    tickets: tickets,
+    users: users,
+    stats: stats
   };
 }
 
 function handleGenerateTickets(generationForm) {
-  const { count, ticketType } = generationForm;
+  const count = generationForm.count;
+  const ticketType = generationForm.ticketType;
   const newTicketsData = [];
   const generatedAt = new Date();
   const user = Session.getEffectiveUser().getEmail();
@@ -394,15 +398,13 @@ function handleGenerateTickets(generationForm) {
 
   for (let i = 0; i < count; i++) {
     currentRow++;
-    const ticketNumber = `TK${ticketType.toUpperCase().slice(0,3)}241031${String(currentRow).padStart(4, '0')}`;
+    const ticketNumber = 'TK' + ticketType.toUpperCase().slice(0,3) + '241031' + String(currentRow).padStart(4, '0');
     
-    // *** CRITICAL FIX ***
-    // UrlFetchApp.fetch().getBlob() already returns a Blob. Do not wrap it in Utilities.newBlob().
-    const qrCodeBlob = UrlFetchApp.fetch(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(ticketNumber)}`).getBlob().setName(`${ticketNumber}_qr.png`);
+    const qrCodeBlob = UrlFetchApp.fetch('https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=' + encodeURIComponent(ticketNumber)).getBlob().setName(ticketNumber + '_qr.png');
     
     const qrCodeFile = DriveApp.getFolderById(FOLDER_IDS.qrCodes).createFile(qrCodeBlob);
     qrCodeFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const qrCodeUrl = `https://drive.google.com/uc?id=${qrCodeFile.getId()}`;
+    const qrCodeUrl = 'https://drive.google.com/uc?id=' + qrCodeFile.getId();
 
     const ticketPdfUrl = createIndividualTicket(ticketNumber, qrCodeFile, settings);
 
@@ -421,7 +423,7 @@ function handleGenerateTickets(generationForm) {
     ticketsSheet.getRange(ticketsSheet.getLastRow() + 1, 1, newTicketsData.length, newTicketsData[0].length).setValues(newTicketsData);
   }
   
-  logAction(user, 'GENERATE_TICKETS', `Generated ${count} x ${ticketType} tickets.`);
+  logAction(user, 'GENERATE_TICKETS', 'Generated ' + count + ' x ' + ticketType + ' tickets.');
   
   return newTicketsData.map(t => ({
       ticketNumber: t[0], ticketType: t[1], scanStatus: t[2], generatedAt: t[3], 
@@ -447,15 +449,14 @@ function saveSettings(settingsObj, files) {
 
         if (key === 'slidesTemplateUrl' && value) {
             const match = value.match(/presentation\/d\/([a-zA-Z0-9-_]+)/);
-            value = (match && match[1]) ? match[1] : value; // Save only the ID
+            value = (match && match[1]) ? match[1] : value;
             settingsSheet.getRange(rowIndex, 2).setValue(value);
-            settingsObj.slidesTemplateId = value; // Ensure the returned object has the ID
+            settingsObj.slidesTemplateId = value;
         } else {
           if (Array.isArray(value)) value = value.join(',');
           if (rowIndex > 1) {
               settingsSheet.getRange(rowIndex, 2).setValue(value);
           } else {
-              // If setting doesn't exist, append it
               settingsSheet.appendRow([key, value]);
           }
         }
@@ -504,7 +505,7 @@ function getEventSettings() {
 
 function getTickets() {
   if (ticketsSheet.getLastRow() < 2) return [];
-  const numCols = Math.max(8, ticketsSheet.getLastColumn()); // Handle both 8 and 9 column formats
+  const numCols = Math.max(8, ticketsSheet.getLastColumn());
   const data = ticketsSheet.getRange(2, 1, ticketsSheet.getLastRow() - 1, numCols).getValues();
   return data.map(row => ({
     ticketNumber: row[0], ticketType: row[1], scanStatus: row[2], generatedAt: row[3],
@@ -538,9 +539,10 @@ function getDashboardStats(tickets, allTicketTypes) {
   });
 
   return {
-    totalGenerated, totalScanned,
+    totalGenerated: totalGenerated, 
+    totalScanned: totalScanned,
     attendanceRate: totalGenerated > 0 ? (totalScanned / totalGenerated) * 100 : 0,
-    breakdown
+    breakdown: breakdown
   };
 }
 
@@ -554,7 +556,7 @@ function processTicketValidation(ticketNumber, scannerId) {
   const textFinder = ticketsSheet.createTextFinder(ticketNumber);
   const found = textFinder.findNext();
   if (!found) {
-    logAction(user, 'SCAN_FAIL', `Ticket not found: ${ticketNumber}`, ticketNumber);
+    logAction(user, 'SCAN_FAIL', 'Ticket not found: ' + ticketNumber, ticketNumber);
     return { status: 'INVALID', message: 'This ticket does not exist in the system.' };
   }
 
@@ -567,21 +569,33 @@ function processTicketValidation(ticketNumber, scannerId) {
   };
 
   if (ticketInfo.scanStatus === 'Scanned') {
-    logAction(user, 'SCAN_DUPLICATE', `Duplicate scan for ticket: ${ticketNumber}`, ticketNumber);
-    return { status: 'INVALID', message: `Already scanned by ${ticketInfo.scannedBy} at ${new Date(ticketInfo.scannedAt).toLocaleString()}.`, ticketNumber: ticketInfo.ticketNumber, ticketType: ticketInfo.ticketType, guestName: ticketInfo.guestName };
+    logAction(user, 'SCAN_DUPLICATE', 'Duplicate scan for ticket: ' + ticketNumber, ticketNumber);
+    return { 
+      status: 'INVALID', 
+      message: 'Already scanned by ' + ticketInfo.scannedBy + ' at ' + new Date(ticketInfo.scannedAt).toLocaleString() + '.', 
+      ticketNumber: ticketInfo.ticketNumber, 
+      ticketType: ticketInfo.ticketType, 
+      guestName: ticketInfo.guestName 
+    };
   }
 
   ticketsSheet.getRange(row, 3).setValue('Scanned');
   ticketsSheet.getRange(row, 5).setValue(new Date());
   ticketsSheet.getRange(row, 6).setValue(user);
   
-  logAction(user, 'SCAN_SUCCESS', `Successfully scanned ticket: ${ticketNumber}`, ticketNumber);
-  return { status: 'VALID', message: 'Access Granted. Welcome!', ticketNumber: ticketInfo.ticketNumber, ticketType: ticketInfo.ticketType, guestName: ticketInfo.guestName };
+  logAction(user, 'SCAN_SUCCESS', 'Successfully scanned ticket: ' + ticketNumber, ticketNumber);
+  return { 
+    status: 'VALID', 
+    message: 'Access Granted. Welcome!', 
+    ticketNumber: ticketInfo.ticketNumber, 
+    ticketType: ticketInfo.ticketType, 
+    guestName: ticketInfo.guestName 
+  };
 }
 
 function addUser(newUser) {
     usersSheet.appendRow([newUser.email, newUser.role, new Date()]);
-    logAction(Session.getEffectiveUser().getEmail(), 'ADD_USER', `Added user: ${newUser.email} with role ${newUser.role}.`);
+    logAction(Session.getEffectiveUser().getEmail(), 'ADD_USER', 'Added user: ' + newUser.email + ' with role ' + newUser.role + '.');
     return newUser;
 }
 
@@ -590,11 +604,11 @@ function removeUser(email) {
     for (let i = data.length - 1; i >= 1; i--) {
         if (data[i][0] === email) {
             usersSheet.deleteRow(i + 1);
-            logAction(Session.getEffectiveUser().getEmail(), 'REMOVE_USER', `Removed user: ${email}.`);
-            return `User ${email} removed.`;
+            logAction(Session.getEffectiveUser().getEmail(), 'REMOVE_USER', 'Removed user: ' + email + '.');
+            return 'User ' + email + ' removed.';
         }
     }
-    throw new Error(`User ${email} not found.`);
+    throw new Error('User ' + email + ' not found.');
 }
 
 function deleteTicket(ticketNumber) {
@@ -602,11 +616,11 @@ function deleteTicket(ticketNumber) {
     for (let i = data.length - 1; i >= 1; i--) {
         if (data[i][0] === ticketNumber) {
             ticketsSheet.deleteRow(i + 1);
-            logAction(Session.getEffectiveUser().getEmail(), 'DELETE_TICKET', `Deleted ticket: ${ticketNumber}.`);
-            return `Ticket ${ticketNumber} deleted.`;
+            logAction(Session.getEffectiveUser().getEmail(), 'DELETE_TICKET', 'Deleted ticket: ' + ticketNumber + '.');
+            return 'Ticket ' + ticketNumber + ' deleted.';
         }
     }
-    throw new Error(`Ticket ${ticketNumber} not found.`);
+    throw new Error('Ticket ' + ticketNumber + ' not found.');
 }
 
 // =================================================================
@@ -624,12 +638,12 @@ function createIndividualTicketWithGuest(ticketNumber, qrCodeFile, settings, gue
 function createTicketPdf(ticketNumber, qrCodeFile, settings, guestName) {
   const templateId = settings.slidesTemplateId || FALLBACK_SLIDES_TEMPLATE_ID;
   if (!templateId) {
-    return `https://drive.google.com/uc?id=${qrCodeFile.getId()}`;
+    return 'https://drive.google.com/uc?id=' + qrCodeFile.getId();
   }
   try {
     const ticketFolder = DriveApp.getFolderById(FOLDER_IDS.generatedTickets);
     const templateFile = DriveApp.getFileById(templateId);
-    const newTicketSlideFile = templateFile.makeCopy(`${ticketNumber}_Ticket`, ticketFolder);
+    const newTicketSlideFile = templateFile.makeCopy(ticketNumber + '_Ticket', ticketFolder);
     
     const presentation = SlidesApp.openById(newTicketSlideFile.getId());
     const slide = presentation.getSlides()[0];
@@ -643,7 +657,7 @@ function createTicketPdf(ticketNumber, qrCodeFile, settings, guestName) {
     if (guestName) {
       slide.replaceAllText('{{GUEST_NAME}}', guestName);
     } else {
-      slide.replaceAllText('{{GUEST_NAME}}', ''); // Remove placeholder if no guest name
+      slide.replaceAllText('{{GUEST_NAME}}', '');
     }
 
     const shapes = slide.getShapes();
@@ -659,29 +673,30 @@ function createTicketPdf(ticketNumber, qrCodeFile, settings, guestName) {
 
     presentation.saveAndClose();
 
-    const pdfBlob = newTicketSlideFile.getAs('application/pdf').setName(`${ticketNumber}.pdf`);
+    const pdfBlob = newTicketSlideFile.getAs('application/pdf').setName(ticketNumber + '.pdf');
     const pdfFile = ticketFolder.createFile(pdfBlob);
     pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     
     newTicketSlideFile.setTrashed(true);
 
-    return `https://drive.google.com/uc?id=${pdfFile.getId()}&export=download`;
+    return 'https://drive.google.com/uc?id=' + pdfFile.getId() + '&export=download';
   } catch(e) {
     logAction('SYSTEM_ERROR', 'PDF_GENERATION_FAIL', e.stack);
-    return `https://drive.google.com/uc?id=${qrCodeFile.getId()}`;
+    return 'https://drive.google.com/uc?id=' + qrCodeFile.getId();
   }
 }
 
 function saveBase64ImageToDrive(base64Data, fileName, folderId) {
   const decoded = Utilities.base64Decode(base64Data.split(',')[1]);
-  const blob = Utilities.newBlob(decoded, base64Data.split(',')[0].split(':')[1].split(';')[0], `${fileName}_${new Date().getTime()}`);
+  const blob = Utilities.newBlob(decoded, base64Data.split(',')[0].split(':')[1].split(';')[0], fileName + '_' + new Date().getTime());
   const folder = DriveApp.getFolderById(folderId);
   const file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return `https://drive.google.com/uc?id=${file.getId()}`;
+  return 'https://drive.google.com/uc?id=' + file.getId();
 }
 
-function logAction(user, action, details, ticketNumber = '') {
+function logAction(user, action, details, ticketNumber) {
+  ticketNumber = ticketNumber || '';
   try {
     const timestamp = new Date();
     logSheet.appendRow([timestamp, user, action, details]);

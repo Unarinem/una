@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Management Portal</title>
+    <base target="_top">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --primary: #5e5ce6;
+            --background-color: #f9f9fb;
+            --card-background-color: #ffffff;
+            --card-shadow: 0 8px 16px rgba(0,0,0,0.05);
+            --border-radius: 1rem;
+        }
+        body { background-color: var(--background-color); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .container { max-width: 1600px; padding: 1.5rem; }
+        [v-cloak] { display: none; }
+        nav {
+            background-color: var(--card-background-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        nav ul { margin-bottom: 0; display: flex; gap: 0.5rem; list-style: none; padding: 0; align-items: center; }
+        nav a { font-weight: 500; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem; transition: background-color 0.2s; }
+        nav a:hover { background-color: #f0f0f0; }
+        article { background-color: var(--card-background-color); border-radius: var(--border-radius); padding: 2rem; box-shadow: var(--card-shadow); border: none; }
+        article[aria-busy="true"] { min-height: 250px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+        .grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+        .event-header { display: flex; align-items: center; gap: 2rem; margin-bottom: 2rem; background-color: var(--card-background-color); padding: 1.5rem; border-radius: var(--border-radius); box-shadow: var(--card-shadow); }
+        .event-pic { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; cursor: pointer; }
+        #scanner-container { position: relative; width: 100%; max-width: 500px; margin: auto; border-radius: var(--border-radius); overflow: hidden; }
+        #qr-video { width: 100%; height: auto; display: block; }
+        .scanner-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; box-shadow: inset 0 0 0 5px rgba(255, 255, 255, 0.2); border: 30px solid rgba(0, 0, 0, 0.5); box-sizing: border-box; }
+        #scan-result { margin-top: 1.5rem; padding: 1.5rem; border-radius: var(--border-radius); text-align: center; }
+        .scan-success { background-color: #e8f5e9; color: #2e7d32; border-left: 5px solid #4caf50; }
+        .scan-error { background-color: #ffebee; color: #c62828; border-left: 5px solid #f44336; }
+        .scan-offline { background-color: #fff3e0; color: #f57c00; border-left: 5px solid #ff9800; }
+        .icon { width: 1.2em; height: 1.2em; vertical-align: -0.25em; }
+        .modal { display: flex; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); align-items: center; justify-content: center; }
+        .modal-content { background-color: #fff; padding: 2rem; width: 90%; max-width: 800px; border-radius: var(--border-radius); text-align: left; max-height: 80vh; overflow-y: auto;}
+        .ticket-group h3 { padding-bottom: 0.5rem; border-bottom: 2px solid var(--primary); margin-bottom: 1rem; }
+        .file-upload-preview { max-width: 200px; max-height: 200px; margin-top: 1rem; border-radius: 0.5rem; }
+        .action-buttons { display: flex; gap: 0.5rem; }
+        .hamburger { display: none; }
+        .auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .scanner-controls { margin-top: 1rem; }
+        .status-indicator { 
+            padding: 0.25rem 0.75rem; 
+            border-radius: 1rem; 
+            font-size: 0.85rem; 
+            font-weight: 500; 
+            display: inline-block; 
+            margin-left: 1rem; 
+        }
+        .status-online { background-color: #e8f5e9; color: #2e7d32; }
+        .status-offline { background-color: #ffebee; color: #c62828; }
+        .status-syncing { background-color: #e3f2fd; color: #1976d2; }
+        .chart-container { height: 400px; margin: 2rem 0; }
+        .csv-import-section { border: 2px dashed #ddd; padding: 2rem; border-radius: var(--border-radius); text-align: center; margin-top: 2rem; }
+        .csv-import-section.dragover { border-color: var(--primary); background-color: rgba(94, 92, 230, 0.05); }
+        .public-validator { max-width: 600px; margin: 2rem auto; }
+        .validation-result { margin-top: 1.5rem; padding: 1.5rem; border-radius: var(--border-radius); text-align: center; }
+        .validation-valid { background-color: #e8f5e9; color: #2e7d32; border-left: 5px solid #4caf50; }
+        .validation-invalid { background-color: #ffebee; color: #c62828; border-left: 5px solid #f44336; }
+        .validation-scanned { background-color: #fff3e0; color: #f57c00; border-left: 5px solid #ff9800; }
+
+        @media (max-width: 992px) {
+            .hamburger { display: block; cursor: pointer; }
+            nav ul.menu-links {
+                display: none;
+                position: absolute;
+                top: 80px;
+                left: 0;
+                width: 100%;
+                background-color: white;
+                flex-direction: column;
+                padding: 1rem;
+                box-shadow: var(--card-shadow);
+                border-radius: var(--border-radius);
+                z-index: 999;
+            }
+            nav ul.menu-links.active { display: flex; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container" v-cloak>
+    
+    <!-- Public Validator Mode -->
+    <div v-if="publicMode" class="public-validator">
+        <article>
+            <h2 style="text-align: center;">Ticket Validator</h2>
+            <p style="text-align: center;">Enter your ticket number to check its validity:</p>
+            <form @submit.prevent="validatePublicTicket">
+                <label for="publicTicketNumber">Ticket Number</label>
+                <input type="text" id="publicTicketNumber" v-model="publicValidator.ticketNumber" 
+                       placeholder="Enter your ticket number..." required>
+                <button type="submit" :aria-busy="publicValidator.checking">Check Ticket</button>
+            </form>
+            
+            <div v-if="publicValidator.result" class="validation-result" 
+                 :class="{
+                     'validation-valid': publicValidator.result.status === 'VALID',
+                     'validation-invalid': publicValidator.result.status === 'INVALID',
+                     'validation-scanned': publicValidator.result.status === 'SCANNED'
+                 }">
+                <h3>{{ publicValidator.result.status === 'VALID' ? 'Valid Ticket' : 
+                      publicValidator.result.status === 'SCANNED' ? 'Already Used' : 'Invalid Ticket' }}</h3>
+                <p>{{ publicValidator.result.message }}</p>
+                <div v-if="publicValidator.result.ticketNumber">
+                    <hr>
+                    <strong>Ticket:</strong> {{ publicValidator.result.ticketNumber }}<br>
+                    <strong>Type:</strong> {{ publicValidator.result.ticketType }}<br>
+                    <strong v-if="publicValidator.result.guestName">Guest:</strong> 
+                    <span v-if="publicValidator.result.guestName">{{ publicValidator.result.guestName }}</span><br>
+                    <span v-if="publicValidator.result.scannedAt">
+                        <strong>Used on:</strong> {{ publicValidator.result.scannedAt }}
+                    </span>
+                </div>
+            </div>
+        </article>
+    </div>
+
+    <!-- Main App Mode -->
+    <div v-if="!publicMode">
+        <div class="auth-overlay" v-if="!auth.authenticated">
+            <article style="width: 400px; text-align: center;">
+                <h4>Device Authentication</h4>
+                <form @submit.prevent="authenticateDevice">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" v-model="auth.password" required>
+                    <p v-if="auth.error" style="color: red;">Invalid Password. Try again.</p>
+                    <button type="submit">Authenticate</button>
+                </form>
+            </article>
+        </div>
+
+        <div v-if="loading && auth.authenticated">
+            <article aria-busy="true">Initialising Ticket System...</article>
+        </div>
+
+        <div v-if="!loading && auth.authenticated">
+            <!-- Navigation -->
+            <nav>
+                <ul>
+                    <li><strong>Event Portal</strong></li>
+                    <li><small>Scanner: {{ scanner.selectedRole }}</small></li>
+                    <li>
+                        <span class="status-indicator" :class="{
+                            'status-online': offline.status === 'online',
+                            'status-offline': offline.status === 'offline',
+                            'status-syncing': offline.status === 'syncing'
+                        }">
+                            {{ offline.status === 'online' ? 'Online' : 
+                               offline.status === 'offline' ? 'Offline' : 'Syncing...' }}
+                        </span>
+                    </li>
+                </ul>
+                <a href="#" class="hamburger" @click.prevent="menuActive = !menuActive">
+                    <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path></svg>
+                </a>
+                <ul class="menu-links" :class="{ active: menuActive }">
+                    <li><a href="#" @click.prevent="setPage('dashboard')">Dashboard</a></li>
+                    <li><a href="#" @click.prevent="setPage('generate')">Generate</a></li>
+                    <li><a href="#" @click.prevent="setPage('tickets')">Tickets</a></li>
+                    <li><a href="#" @click.prevent="setPage('users')">Staff</a></li>
+                    <li><a href="#" @click.prevent="setPage('scanner')">Scanner</a></li>
+                    <li><a href="#" @click.prevent="setPage('settings')">Settings</a></li>
+                    <li><a href="#" @click.prevent="changeScanner">Log Out</a></li>
+                </ul>
+            </nav>
+
+            <!-- Event Header -->
+            <header class="event-header">
+                <img :src="settings.eventPicture || 'https://placehold.co/120x120/EFEFEF/333333?text=Event'" alt="Event Picture" class="event-pic">
+                <div>
+                    <hgroup>
+                        <h2 style="margin-bottom: 0;">{{ settings.eventName || 'Event Dashboard' }}</h2>
+                        <p>{{ settings.eventVenue || 'No venue set' }} | {{ formatDateTime(settings.eventDateTime) }}</p>
+                    </hgroup>
+                </div>
+            </header>
+
+            <main>
+                <!-- Dashboard Page -->
+                <div v-if="currentPage === 'dashboard'">
+                    <h3>Overall Performance</h3>
+                    <div class="grid">
+                        <article class="stat-card"><header>Total Generated</header><h2>{{ stats.totalGenerated }}</h2></article>
+                        <article class="stat-card"><header>Total Scanned</header><h2>{{ stats.totalScanned }}</h2></article>
+                        <article class="stat-card"><header>Attendance Rate</header><h2>{{ (stats.attendanceRate || 0).toFixed(1) }}%</h2></article>
+                    </div>
+                    
+                    <!-- Hourly Analytics Chart -->
+                    <article>
+                        <h3>Hourly Scan Activity</h3>
+                        <div class="chart-container">
+                            <canvas id="hourlyChart"></canvas>
+                        </div>
+                    </article>
+                    
+                    <h3 style="margin-top: 2rem;">Performance by Ticket Type</h3>
+                    <div class="grid">
+                        <article v-for="(typeStats, typeName) in stats.breakdown" :key="typeName">
+                            <header><h4>{{ typeName }}</h4></header>
+                            <p>Generated: {{ typeStats.generated }} | Scanned: {{ typeStats.scanned }}</p>
+                            <progress :value="typeStats.scanned" :max="typeStats.generated"></progress>
+                            <small>Attendance: {{ typeStats.generated > 0 ? (typeStats.scanned / typeStats.generated * 100).toFixed(1) : 0 }}%</small>
+                        </article>
+                    </div>
+                </div>
+
+                <!-- Generate Tickets Page -->
+                <div v-if="currentPage === 'generate'" class="grid" style="align-items: start;">
+                    <article>
+                        <h2>Generate New Tickets</h2>
+                        <form @submit.prevent="handleGenerateTickets">
+                            <label for="ticketType">Ticket Type</label>
+                            <select id="ticketType" v-model="generationForm.ticketType" required>
+                                <option disabled value="">Please select a type</option>
+                                <option v-for="type in settings.ticketTypes" :key="type" :value="type">{{ type }}</option>
+                            </select>
+                            <label for="ticketCount">Number of Tickets</label>
+                            <input type="number" id="ticketCount" v-model.number="generationForm.count" min="1" max="500" required>
+                            <button type="submit" :aria-busy="generating">Generate Tickets</button>
+                        </form>
+                        
+                        <!-- CSV Import Section -->
+                        <div class="csv-import-section" 
+                             @dragover.prevent="csvImport.dragover = true"
+                             @dragleave.prevent="csvImport.dragover = false"
+                             @drop.prevent="handleCsvDrop"
+                             :class="{ dragover: csvImport.dragover }">
+                            <h3>Bulk Import from CSV</h3>
+                            <p>Upload a CSV file with guest names to generate personalized tickets</p>
+                            <input type="file" @change="handleCsvFile" accept=".csv" id="csvFileInput" style="display: none;">
+                            <button @click="document.getElementById('csvFileInput').click()" 
+                                    class="outline">Choose CSV File</button>
+                            <p><small>Or drag and drop your CSV file here</small></p>
+                            
+                            <div v-if="csvImport.file">
+                                <hr>
+                                <p><strong>Selected file:</strong> {{ csvImport.file.name }}</p>
+                                <label for="csvTicketType">Ticket Type for Import</label>
+                                <select id="csvTicketType" v-model="csvImport.ticketType" required>
+                                    <option disabled value="">Select ticket type</option>
+                                    <option v-for="type in settings.ticketTypes" :key="type" :value="type">{{ type }}</option>
+                                </select>
+                                <button @click="processCsvImport" :aria-busy="csvImport.processing" 
+                                        :disabled="!csvImport.ticketType">Import Tickets</button>
+                            </div>
+                        </div>
+                    </article>
+                    
+                    <article>
+                        <h2>Recent Activity</h2>
+                        <div v-if="recentGenerations.length === 0">No recent activity.</div>
+                        <div v-for="(item, index) in recentGenerations" :key="index" class="recent-activity-item">
+                            {{ item.timestamp.toLocaleTimeString() }} - 
+                            <strong v-if="item.count">Generated {{ item.count }} x {{ item.type }} tickets</strong>
+                            <strong v-else>Imported {{ item.importCount }} tickets from CSV</strong>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- View Tickets Page -->
+                <div v-if="currentPage === 'tickets'">
+                    <h1>View All Tickets</h1>
+                    <article>
+                        <div v-for="(group, groupName) in groupedTickets" :key="groupName" class="ticket-group">
+                            <h3>{{ groupName }} ({{ group.length }})</h3>
+                            <table>
+                                <thead>
+                                    <tr><th>Ticket #</th><th>Guest Name</th><th>Status</th><th>Generated At</th><th>Actions</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="ticket in group" :key="ticket.ticketNumber">
+                                        <td>{{ ticket.ticketNumber }}</td>
+                                        <td>{{ ticket.guestName || '-' }}</td>
+                                        <td><span :style="{ color: ticket.scanStatus === 'Scanned' ? '#4caf50' : '#ff9800' }">{{ ticket.scanStatus }}</span></td>
+                                        <td>{{ formatDateTime(ticket.generatedAt) }}</td>
+                                        <td class="action-buttons">
+                                            <a :href="ticket.pdfUrl" target="_blank" role="button" class="outline" title="Download"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></a>
+                                            <a :href="'mailto:?subject=Your Ticket for ' + settings.eventName + '&body=Here is your ticket: ' + ticket.pdfUrl" role="button" class="outline" title="Email"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg></a>
+                                            <a :href="'https://wa.me/?text=Your ticket for ' + settings.eventName + ': ' + ticket.pdfUrl" target="_blank" role="button" class="outline" title="WhatsApp"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91s-4.45-9.91-9.91-9.91zM17.5 14.3c-.28-.14-1.67-.82-1.93-.91-.26-.1-.45-.14-.64.14-.19.28-.73.91-.9 1.1-.17.19-.34.21-.61.07-.28-.14-1.17-.43-2.23-1.38-.82-.72-1.38-1.62-1.54-1.89-.17-.28-.02-.43.12-.57.13-.13.28-.34.42-.51.14-.17.19-.28.28-.47.1-.19.05-.36-.02-.51-.07-.14-.64-1.54-.88-2.1-.24-.56-.48-.48-.64-.49-.17-.01-.36-.01-.55-.01-.19 0-.5.07-.76.35-.26.28-1 .99-1 2.41s1.02 2.78 1.17 2.97c.14.19 2 3.19 4.86 4.26.68.26 1.21.42 1.62.53.84.23 1.59.19 2.18.11.66-.08 1.67-.68 1.9-1.33.24-.65.24-1.21.17-1.33-.07-.12-.26-.2-.54-.34z"/></svg></a>
+                                            <button class="secondary" @click="confirmAction('deleteTicket', ticket.ticketNumber)">Delete</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Live Scanner Page -->
+                <div v-if="currentPage === 'scanner'">
+                    <h1>Live Ticket Scanner</h1>
+                    <article style="text-align: center;">
+                        <p>Scanning as: <strong>{{ scanner.selectedRole }}</strong>
+                            <span class="status-indicator" :class="{
+                                'status-online': offline.status === 'online',
+                                'status-offline': offline.status === 'offline',
+                                'status-syncing': offline.status === 'syncing'
+                            }">
+                                {{ offline.status === 'online' ? 'Online Mode' : 
+                                   offline.status === 'offline' ? 'Offline Mode' : 'Syncing...' }}
+                            </span>
+                        </p>
+                        
+                        <div v-if="offline.pendingScans.length > 0" class="scan-offline">
+                            <p><strong>{{ offline.pendingScans.length }}</strong> scans stored offline</p>
+                        </div>
+                        
+                        <div v-if="!isScanning">
+                            <button @click="startScanner">Start Camera</button>
+                        </div>
+                        <div v-if="isScanning">
+                            <div id="scanner-container">
+                                <video id="qr-video" playsinline></video>
+                                <div class="scanner-overlay"></div>
+                            </div>
+                            <div class="scanner-controls">
+                                <button @click="stopScanner" class="secondary">Stop Camera</button>
+                            </div>
+                        </div>
+                        <div v-if="scanResult.message" id="scan-result" 
+                             :class="{
+                                 'scan-success': scanResult.status === 'VALID',
+                                 'scan-error': scanResult.status === 'INVALID',
+                                 'scan-offline': scanResult.offline
+                             }">
+                            <h3>{{ scanResult.status }}{{ scanResult.offline ? ' (Stored Offline)' : '' }}</h3>
+                            <p>{{ scanResult.message }}</p>
+                            <div v-if="scanResult.ticketNumber">
+                                <hr>
+                                <strong>Ticket:</strong> {{ scanResult.ticketNumber }}<br>
+                                <strong>Type:</strong> {{ scanResult.ticketType }}<br>
+                                <strong v-if="scanResult.guestName">Guest:</strong> 
+                                <span v-if="scanResult.guestName">{{ scanResult.guestName }}</span>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Settings Page -->
+                <div v-if="currentPage === 'settings'">
+                    <h1>Event Settings</h1>
+                    <article>
+                        <form @submit.prevent="confirmAction('saveSettings')">
+                            <div class="grid">
+                                <label>Event Name <input type="text" v-model="settings.eventName"></label>
+                                <label>Event Venue <input type="text" v-model="settings.eventVenue"></label>
+                            </div>
+                            <label>Event Date and Time <input type="datetime-local" v-model="settings.eventDateTime"></label>
+                            <hr>
+                            <h4>Ticket Types</h4>
+                            <div v-for="(type, index) in settings.ticketTypes" :key="index" class="grid">
+                                <input type="text" :value="type" @change="settings.ticketTypes[index] = $event.target.value">
+                                <button class="secondary" @click.prevent="confirmAction('removeTicketType', index)">Remove</button>
+                            </div>
+                            <button class="outline" @click.prevent="settings.ticketTypes.push('New Type')">Add Ticket Type</button>
+                            <hr>
+                            <h4>Event Profile Picture</h4>
+                            <input type="file" @change="handleImageUpload($event, 'eventPicture')" accept="image/*">
+                            <img v-if="settings.eventPicture" :src="settings.eventPicture" class="file-upload-preview" alt="Event Picture Preview">
+                            <hr>
+                            <h4>Google Slides Template URL</h4>
+                            <p>Paste the full URL of your Google Slides ticket template. Use <code>{{GUEST_NAME}}</code> placeholder for personalized tickets.</p>
+                            <input type="text" v-model="settings.slidesTemplateUrl" placeholder="https://docs.google.com/presentation/d/...">
+                            <hr>
+                            <button type="submit" :aria-busy="savingSettings">Save All Settings</button>
+                        </form>
+                    </article>
+                </div>
+
+                <!-- Manage Users Page -->
+                <div v-if="currentPage === 'users'">
+                    <h1>Manage Staff Users</h1>
+                    <article>
+                        <h3>Current Staff</h3>
+                        <table>
+                            <thead><tr><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+                            <tbody>
+                                <tr v-for="user in users" :key="user.email">
+                                    <td>{{ user.email }}</td>
+                                    <td>{{ user.role }}</td>
+                                    <td class="action-buttons">
+                                        <button @click="viewUserLogs(user.email)">View Logs</button>
+                                        <button class="secondary" @click="confirmAction('removeUser', user.email)">Remove</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <hr>
+                        <form @submit.prevent="handleAddUser" class="grid">
+                            <input type="email" v-model="newUser.email" placeholder="user@example.com" required>
+                            <select v-model="newUser.role" required>
+                                <option value="Scanner">Scanner</option>
+                                <option value="Client Admin">Client Admin</option>
+                            </select>
+                            <button type="submit">Add User</button>
+                        </form>
+                    </article>
+                </div>
+            </main>
+
+            <!-- Modals -->
+            <div class="modal" v-if="confirmation.active">
+                <article class="modal-content">
+                    <h3>{{ confirmation.title }}</h3>
+                    <p>{{ confirmation.message }}</p>
+                    <footer>
+                        <button class="secondary" @click="cancelConfirmation">Cancel</button>
+                        <button @click="executeConfirmedAction">Yes, Proceed</button>
+                    </footer>
+                </article>
+            </div>
+            <div class="modal" v-if="userLogs.active">
+                 <article class="modal-content">
+                    <h3>Scan Logs for {{ userLogs.email }}</h3>
+                    <div v-if="userLogs.loading" aria-busy="true">Loading logs...</div>
+                    <div v-else>
+                        <table v-if="userLogs.logs.length > 0">
+                            <thead>
+                                <tr><th>Timestamp</th><th>Action</th><th>Ticket #</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(log, index) in userLogs.logs" :key="index">
+                                    <td>{{ formatDateTime(log.Timestamp) }}</td>
+                                    <td>{{ log.Action }}</td>
+                                    <td>{{ log['Ticket Number'] }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p v-else>No scan activity found for this user.</p>
+                    </div>
+                    <footer>
+                        <button @click="userLogs.active = false">Close</button>
+                    </footer>
+                </article>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp, computed } = Vue;
+    
+    // UPDATE THIS URL WITH YOUR DEPLOYED WEB APP URL
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbw2jFW7pbwqpcxJc8UWbAGe63kEapS4UTWsbVYTWoultkd0yvL7gF7_v3nIbNs0_D57cg/exec';
+    
+    const APP_PASSWORDS = ['Unarine@123', 'Admin2025!', 'ScannerPro#'];
+
+    // Check if running in public validator mode
+    const isPublicMode = window.location.hash === '#public' || window.location.search.includes('public=true');
+
+    const server = {
+        async call(action, payload) {
+            const response = await fetch(WEB_APP_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: action, payload: payload }),
+                redirect: 'follow'
+            });
+            const result = await response.json();
+            if (result.status === 'error') throw new Error(result.message);
+            return result.data;
+        },
+        async callPublic(action, params) {
+            const url = new URL(WEB_APP_URL);
+            url.searchParams.append('action', action);
+            Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+            
+            const response = await fetch(url.toString());
+            const result = await response.json();
+            if (result.status === 'error') throw new Error(result.message);
+            return result.data;
+        },
+        getInitialData: () => server.call('getInitialData'),
+        getUsers: () => server.call('getUsers'),
+        handleGenerateTickets: (form) => server.call('handleGenerateTickets', form),
+        processTicketValidation: (ticket, scanner) => server.call('processTicketValidation', { ticketNumber: ticket, scannerId: scanner }),
+        saveSettings: (settings, files) => server.call('saveSettings', { settings: settings, files: files }),
+        addUser: (user) => server.call('addUser', user),
+        removeUser: (email) => server.call('removeUser', email),
+        deleteTicket: (ticketNumber) => server.call('deleteTicket', ticketNumber),
+        getUserLogs: (email) => server.call('getUserLogs', email),
+        syncOfflineScans: (scans) => server.call('syncOfflineScans', scans),
+        getHourlyAnalytics: () => server.call('getHourlyAnalytics'),
+        importCsvTickets: (csvData) => server.call('importCsvTickets', csvData),
+        validateTicketPublic: (ticketNumber) => server.callPublic('validatePublic', { ticket: ticketNumber })
+    };
+
+    const vueAppConfig = {
+        data() {
+            return {
+                publicMode: isPublicMode,
+                loading: !isPublicMode, 
+                generating: false, 
+                savingSettings: false, 
+                currentPage: 'dashboard', 
+                menuActive: false,
+                auth: { authenticated: false, password: '', scanner: '', error: false },
+                userInfo: {}, 
+                stats: { attendanceRate: 0, totalGenerated: 0, totalScanned: 0, breakdown: {} },
+                tickets: [], 
+                users: [], 
+                settings: { eventName: "", eventVenue: "", eventDateTime: "", ticketTypes: [], slidesTemplateUrl: "" },
+                filesToUpload: {}, 
+                generationForm: { ticketType: "", count: 1 }, 
+                recentGenerations: [],
+                newUser: { email: "", role: 'Scanner' },
+                confirmation: { active: false, action: null, payload: null, title: "", message: "" },
+                isScanning: false, 
+                scanResult: {}, 
+                videoStream: null, 
+                scanner: { roleSelected: false, selectedRole: "" },
+                userLogs: { active: false, loading: false, email: '', logs: [] },
+                offline: {
+                    status: 'online',
+                    pendingScans: []
+                },
+                csvImport: {
+                    file: null,
+                    ticketType: '',
+                    processing: false,
+                    dragover: false
+                },
+                publicValidator: {
+                    ticketNumber: '',
+                    checking: false,
+                    result: null
+                },
+                hourlyChart: null
+            };
+        },
+        computed: {
+            groupedTickets() {
+                const grouped = this.tickets.reduce((acc, ticket) => {
+                    const key = ticket.ticketType;
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(ticket);
+                    return acc;
+                }, {});
+                return Object.keys(grouped).sort().reduce((obj, key) => {
+                    obj[key] = grouped[key].sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
+                    return obj;
+                }, {});
+            }
+        },
+        async created() {
+            if (this.publicMode) {
+                this.loading = false;
+                return;
+            }
+            
+            const savedScanner = localStorage.getItem('ticketScannerAuth');
+            if (savedScanner) {
+                this.auth.authenticated = true;
+                this.scanner.selectedRole = savedScanner;
+                this.scanner.roleSelected = true;
+                await this.fetchInitialData();
+            } else {
+                this.loading = false;
+            }
+            
+            this.checkOnlineStatus();
+            window.addEventListener('online', this.handleOnline);
+            window.addEventListener('offline', this.handleOffline);
+            
+            this.loadOfflineScans();
+        },
+        mounted() {
+            if (!this.publicMode && this.auth.authenticated) {
+                this.$nextTick(() => {
+                    this.loadHourlyChart();
+                });
+            }
+        },
+        beforeUnmount() {
+            window.removeEventListener('online', this.handleOnline);
+            window.removeEventListener('offline', this.handleOffline);
+        },
+        methods: {
+            // Public Validator Methods
+            async validatePublicTicket() {
+                this.publicValidator.checking = true;
+                try {
+                    this.publicValidator.result = await server.validateTicketPublic(this.publicValidator.ticketNumber);
+                } catch (error) {
+                    this.publicValidator.result = {
+                        status: 'INVALID',
+                        message: 'Error checking ticket: ' + error.message
+                    };
+                } finally {
+                    this.publicValidator.checking = false;
+                }
+            },
+            
+            // Offline Management
+            checkOnlineStatus() {
+                this.offline.status = navigator.onLine ? 'online' : 'offline';
+            },
+            handleOnline() {
+                this.offline.status = 'online';
+                if (this.offline.pendingScans.length > 0) {
+                    this.syncOfflineScans();
+                }
+            },
+            handleOffline() {
+                this.offline.status = 'offline';
+            },
+            loadOfflineScans() {
+                const stored = localStorage.getItem('offlineScans');
+                if (stored) {
+                    this.offline.pendingScans = JSON.parse(stored);
+                }
+            },
+            saveOfflineScans() {
+                localStorage.setItem('offlineScans', JSON.stringify(this.offline.pendingScans));
+            },
+            addOfflineScan(ticketNumber) {
+                const scan = {
+                    ticketNumber: ticketNumber,
+                    timestamp: new Date().toISOString(),
+                    scannerId: this.scanner.selectedRole
+                };
+                this.offline.pendingScans.push(scan);
+                this.saveOfflineScans();
+            },
+            async syncOfflineScans() {
+                if (this.offline.pendingScans.length === 0) return;
+                
+                this.offline.status = 'syncing';
+                try {
+                    const results = await server.syncOfflineScans(this.offline.pendingScans);
+                    
+                    results.successful.forEach(sync => {
+                        const ticket = this.tickets.find(t => t.ticketNumber === sync.ticketNumber);
+                        if (ticket) {
+                            ticket.scanStatus = 'Scanned';
+                            ticket.scannedBy = this.scanner.selectedRole;
+                        }
+                    });
+                    
+                    this.offline.pendingScans = this.offline.pendingScans.filter(scan => 
+                        !results.successful.some(s => s.ticketNumber === scan.ticketNumber)
+                    );
+                    this.saveOfflineScans();
+                    this.updateStats();
+                    
+                    this.offline.status = 'online';
+                } catch (error) {
+                    console.error('Sync failed:', error);
+                    this.offline.status = 'offline';
+                }
+            },
+            
+            // CSV Import Methods
+            handleCsvFile(event) {
+                this.csvImport.file = event.target.files[0];
+            },
+            handleCsvDrop(event) {
+                this.csvImport.dragover = false;
+                const files = event.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'text/csv') {
+                    this.csvImport.file = files[0];
+                }
+            },
+            async processCsvImport() {
+                if (!this.csvImport.file || !this.csvImport.ticketType) return;
+                
+                this.csvImport.processing = true;
+                try {
+                    const csvContent = await this.readFileAsText(this.csvImport.file);
+                    const result = await server.importCsvTickets({
+                        csvContent: csvContent,
+                        ticketType: this.csvImport.ticketType
+                    });
+                    
+                    this.tickets.push(...result.tickets);
+                    this.updateStats();
+                    
+                    this.recentGenerations.unshift({
+                        importCount: result.count,
+                        type: this.csvImport.ticketType,
+                        timestamp: new Date()
+                    });
+                    if (this.recentGenerations.length > 5) this.recentGenerations.pop();
+                    
+                    this.csvImport.file = null;
+                    this.csvImport.ticketType = '';
+                    document.getElementById('csvFileInput').value = '';
+                    
+                    alert('Successfully imported ' + result.count + ' tickets!');
+                } catch (error) {
+                    alert('CSV import failed: ' + error.message);
+                } finally {
+                    this.csvImport.processing = false;
+                }
+            },
+            readFileAsText(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsText(file);
+                });
+            },
+            
+            // Chart Methods
+            async loadHourlyChart() {
+                try {
+                    const analyticsData = await server.getHourlyAnalytics();
+                    this.renderHourlyChart(analyticsData);
+                } catch (error) {
+                    console.error('Failed to load analytics:', error);
+                }
+            },
+            renderHourlyChart(data) {
+                const ctx = document.getElementById('hourlyChart');
+                if (!ctx) return;
+                
+                if (this.hourlyChart) {
+                    this.hourlyChart.destroy();
+                }
+                
+                const labels = data.map(d => d.hour + ':00');
+                const counts = data.map(d => d.count);
+                
+                this.hourlyChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Scans per Hour',
+                            data: counts,
+                            borderColor: '#5e5ce6',
+                            backgroundColor: 'rgba(94, 92, 230, 0.1)',
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+            
+            // Authentication Methods
+            async authenticateDevice() {
+                if (APP_PASSWORDS.includes(this.auth.password)) {
+                    this.auth.error = false;
+                    this.auth.authenticated = true;
+                    const scannerId = 'Authenticated Device';
+                    localStorage.setItem('ticketScannerAuth', scannerId);
+                    this.scanner.selectedRole = scannerId;
+                    this.scanner.roleSelected = true;
+                    await this.fetchInitialData();
+                } else {
+                    this.auth.error = true;
+                }
+            },
+            changeScanner() {
+                localStorage.removeItem('ticketScannerAuth');
+                window.location.reload();
+            },
+            setPage(page) {
+                this.currentPage = page;
+                this.menuActive = false;
+                
+                if (page === 'dashboard') {
+                    this.$nextTick(() => {
+                        this.loadHourlyChart();
+                    });
+                }
+            },
+            
+            // Data Management
+            async fetchInitialData() {
+                this.loading = true;
+                try {
+                    const initialData = await server.getInitialData();
+                    this.userInfo = initialData.userInfo;
+                    this.settings = initialData.settings;
+                    this.users = initialData.users;
+                    this.tickets = initialData.tickets;
+                    this.stats = initialData.stats;
+                } catch (error) {
+                    console.error("Error during initial data load:", error);
+                    alert("Could not load initial data. Please check the browser console for errors and ensure the Web App URL is correct.");
+                } finally {
+                    this.loading = false;
+                }
+            },
+            updateStats() {
+                const totalGenerated = this.tickets.length;
+                const totalScanned = this.tickets.filter(t => t.scanStatus === 'Scanned').length;
+                const breakdown = {};
+                (this.settings.ticketTypes || []).forEach(type => {
+                    breakdown[type] = { generated: 0, scanned: 0 };
+                });
+                this.tickets.forEach(t => {
+                    if (!breakdown[t.ticketType]) breakdown[t.ticketType] = { generated: 0, scanned: 0 };
+                    breakdown[t.ticketType].generated++;
+                    if (t.scanStatus === 'Scanned') breakdown[t.ticketType].scanned++;
+                });
+                this.stats = {
+                    totalGenerated: totalGenerated, 
+                    totalScanned: totalScanned,
+                    attendanceRate: totalGenerated > 0 ? (totalScanned / totalGenerated) * 100 : 0,
+                    breakdown: breakdown
+                };
+            },
+            
+            // Ticket Generation
+            async handleGenerateTickets() {
+                if (!this.generationForm.ticketType) { 
+                    alert("Please select a ticket type."); 
+                    return; 
+                }
+                this.generating = true;
+                try {
+                    const newTickets = await server.handleGenerateTickets(this.generationForm);
+                    this.tickets.push(...newTickets);
+                    const generationData = { 
+                        count: this.generationForm.count, 
+                        type: this.generationForm.ticketType, 
+                        timestamp: new Date() 
+                    };
+                    this.recentGenerations.unshift(generationData);
+                    if (this.recentGenerations.length > 5) this.recentGenerations.pop();
+                    this.generationForm = { ticketType: "", count: 1 };
+                    this.updateStats();
+                } catch(error) {
+                    alert('Error generating tickets: ' + error.message);
+                } finally {
+                    this.generating = false;
+                }
+            },
+            
+            // Ticket Management
+            async handleDeleteTicket(ticketNumber) {
+                try {
+                    await server.deleteTicket(ticketNumber);
+                    this.tickets = this.tickets.filter(t => t.ticketNumber !== ticketNumber);
+                    this.updateStats();
+                } catch (error) { 
+                    alert('Error deleting ticket: ' + error.message); 
+                }
+            },
+            
+            // User Management
+            async handleAddUser() {
+                if (this.users.find(u => u.email === this.newUser.email)) { 
+                    alert("This user already exists."); 
+                    return; 
+                }
+                try {
+                    const addedUser = await server.addUser(this.newUser);
+                    this.users.push(addedUser);
+                    this.newUser = { email: "", role: 'Scanner' };
+                } catch(error) { 
+                    alert('Error adding user: ' + error.message); 
+                    console.error(error);
+                }
+            },
+            async handleRemoveUser(email) {
+                try {
+                    await server.removeUser(email);
+                    this.users = this.users.filter(u => u.email !== email);
+                } catch (error) { 
+                    alert('Error removing user: ' + error.message); 
+                }
+            },
+            
+            // Settings Management
+            async handleSaveSettings() {
+                this.savingSettings = true;
+                try {
+                    const updatedSettings = await server.saveSettings(this.settings, this.filesToUpload);
+                    this.settings = updatedSettings;
+                    this.filesToUpload = {};
+                    alert("Settings Saved!");
+                } catch(error) {
+                    alert('Error saving settings: ' + error.message);
+                } finally {
+                    this.savingSettings = false;
+                }
+            },
+            handleImageUpload(event, targetProperty) {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.settings[targetProperty] = e.target.result;
+                    this.filesToUpload[targetProperty] = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            },
+            
+            // User Logs
+            async viewUserLogs(email) {
+                this.userLogs = { active: true, loading: true, email: email, logs: [] };
+                try {
+                    this.userLogs.logs = await server.getUserLogs(email);
+                } catch (e) {
+                    alert('Could not fetch user logs: ' + e.message);
+                } finally {
+                    this.userLogs.loading = false;
+                }
+            },
+            
+            // Confirmation Dialogs
+            confirmAction(action, payload) {
+                payload = payload || null;
+                const titles = { 
+                    deleteTicket: 'Confirm Deletion', 
+                    saveSettings: 'Confirm Save', 
+                    removeUser: 'Confirm Removal', 
+                    removeTicketType: 'Confirm Removal' 
+                };
+                const messages = {
+                    deleteTicket: 'Are you sure you want to delete ticket ' + payload + '?',
+                    saveSettings: 'Are you sure you want to save all settings?',
+                    removeUser: 'Are you sure you want to remove user ' + payload + '?',
+                    removeTicketType: 'Are you sure you want to remove this ticket type?'
+                };
+                this.confirmation = { 
+                    active: true, 
+                    action: action, 
+                    payload: payload, 
+                    title: titles[action], 
+                    message: messages[action] 
+                };
+            },
+            executeConfirmedAction() {
+                const action = this.confirmation.action;
+                const payload = this.confirmation.payload;
+                if (action === 'deleteTicket') this.handleDeleteTicket(payload);
+                if (action === 'saveSettings') this.handleSaveSettings();
+                if (action === 'removeUser') this.handleRemoveUser(payload);
+                if (action === 'removeTicketType') this.settings.ticketTypes.splice(payload, 1);
+                this.cancelConfirmation();
+            },
+            cancelConfirmation() {
+                this.confirmation = { active: false, action: null, payload: null, title: "", message: "" };
+            },
+            
+            // Scanner Methods
+            startScanner() {
+                this.isScanning = true;
+                this.scanResult = {};
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                    .then(stream => {
+                        this.videoStream = stream;
+                        const video = document.getElementById('qr-video');
+                        if (video) {
+                            video.srcObject = stream;
+                            video.setAttribute("playsinline", true);
+                            video.play();
+                            requestAnimationFrame(this.tick);
+                        }
+                    }).catch(err => {
+                        this.isScanning = false;
+                        alert("Could not access camera. Please grant permission and try again. Error: " + err.message);
+                    });
+            },
+            tick() {
+                if (!this.isScanning || !this.videoStream) return;
+                const video = document.getElementById('qr-video');
+                if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+                    const canvasElement = document.createElement('canvas');
+                    canvasElement.height = video.videoHeight;
+                    canvasElement.width = video.videoWidth;
+                    const canvas = canvasElement.getContext('2d');
+                    canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+                    const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                    if (code) {
+                        this.stopScanner();
+                        this.validateTicket(code.data);
+                        return;
+                    }
+                }
+                requestAnimationFrame(this.tick);
+            },
+            stopScanner() {
+                if (this.videoStream) {
+                    this.videoStream.getTracks().forEach(track => track.stop());
+                }
+                this.isScanning = false;
+            },
+            async validateTicket(ticketNumber) {
+                this.scanResult = { message: 'Validating ' + ticketNumber + '...' };
+                
+                if (this.offline.status === 'offline') {
+                    const existingTicket = this.tickets.find(t => t.ticketNumber === ticketNumber);
+                    if (!existingTicket) {
+                        this.scanResult = { status: 'INVALID', message: 'This ticket does not exist in the system.' };
+                        return;
+                    }
+                    
+                    if (existingTicket.scanStatus === 'Scanned') {
+                        this.scanResult = { 
+                            status: 'INVALID', 
+                            message: 'Already scanned.',
+                            ticketNumber: existingTicket.ticketNumber, 
+                            ticketType: existingTicket.ticketType,
+                            guestName: existingTicket.guestName
+                        };
+                        return;
+                    }
+                    
+                    this.addOfflineScan(ticketNumber);
+                    
+                    existingTicket.scanStatus = 'Scanned';
+                    existingTicket.scannedBy = this.scanner.selectedRole;
+                    existingTicket.scannedAt = new Date();
+                    
+                    this.updateStats();
+                    
+                    this.scanResult = { 
+                        status: 'VALID', 
+                        message: 'Access Granted. Welcome!',
+                        ticketNumber: existingTicket.ticketNumber, 
+                        ticketType: existingTicket.ticketType,
+                        guestName: existingTicket.guestName,
+                        offline: true
+                    };
+                    return;
+                }
+                
+                try {
+                    const response = await server.processTicketValidation(ticketNumber, this.scanner.selectedRole);
+                    this.scanResult = response;
+                    const ticketIndex = this.tickets.findIndex(t => t.ticketNumber === response.ticketNumber);
+                    if (ticketIndex !== -1 && response.status === 'VALID') {
+                        this.tickets[ticketIndex].scanStatus = 'Scanned';
+                        this.tickets[ticketIndex].scannedBy = this.scanner.selectedRole;
+                        this.tickets[ticketIndex].scannedAt = new Date();
+                        this.updateStats();
+                    }
+                } catch (error) {
+                    this.scanResult = { status: 'ERROR', message: error.message };
+                }
+            },
+            
+            // Utility Methods
+            formatDateTime(dateTimeString) {
+                if (!dateTimeString) return 'No date set';
+                return new Date(dateTimeString).toLocaleString();
+            }
+        }
+    };
+
+    createApp(vueAppConfig).mount('#app');
+</script>
+
+</body>
+</html>
